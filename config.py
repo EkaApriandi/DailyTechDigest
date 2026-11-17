@@ -28,35 +28,45 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
-# Daftar RSS Feed teknologi & riset AI terkurasi
+# Daftar RSS Feed berita umum dunia, nasional, dan teknologi terkurasi
 RSS_FEEDS = [
     {
-        "category": "🤖 AI & Machine Learning",
+        "category": "🌍 Peristiwa Dunia (World News)",
+        "name": "BBC World",
+        "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+    },
+    {
+        "category": "🇮🇩 Sorotan Utama Indonesia",
+        "name": "BBC Indonesia",
+        "url": "https://feeds.bbci.co.uk/indonesia/rss.xml",
+    },
+    {
+        "category": "🇮🇩 Sorotan Utama Indonesia",
+        "name": "Antara Terkini",
+        "url": "https://www.antaranews.com/rss/terkini.xml",
+    },
+    {
+        "category": "🤖 Tren AI & Riset Masa Depan",
         "name": "VentureBeat AI",
         "url": "https://venturebeat.com/category/ai/feed/",
     },
     {
-        "category": "🤖 AI & Machine Learning",
-        "name": "MIT Tech Review AI",
+        "category": "🤖 Tren AI & Riset Masa Depan",
+        "name": "MIT Tech Review",
         "url": "https://www.technologyreview.com/feed/",
     },
     {
-        "category": "💻 Tech & Startups",
+        "category": "💻 Bisnis, Startup & Teknologi",
         "name": "Hacker News",
         "url": "https://hnrss.org/frontpage",
     },
     {
-        "category": "💻 Tech & Startups",
+        "category": "💻 Bisnis, Startup & Teknologi",
         "name": "TechCrunch",
         "url": "https://techcrunch.com/feed/",
     },
     {
-        "category": "🛠️ Engineering & Inovasi",
-        "name": "Ars Technica",
-        "url": "https://feeds.arstechnica.com/arstechnica/index",
-    },
-    {
-        "category": "🌐 Tech Frontier",
+        "category": "🌐 Gadget & Budaya Digital",
         "name": "The Verge",
         "url": "https://www.theverge.com/rss/index.xml",
     }

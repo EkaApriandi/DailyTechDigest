@@ -38,7 +38,7 @@ def build_digest_messages(categorized_articles: Dict[str, List[Dict[str, Any]]],
     lengkap dengan pemecahan otomatis jika panjang teks melebihi batas Telegram (4096 karakter).
     """
     today_str = datetime.now().strftime("%d %b %Y")
-    header = f"🌅 <b>DAILY TECH DIGEST · {today_str}</b>\n<i>Kurasi berita teknologi & riset AI terkini:</i>\n"
+    header = f"🌅 <b>DAILY WORLD & TECH DIGEST · {today_str}</b>\n<i>Rangkuman peristiwa penting dunia, nasional & teknologi hari ini:</i>\n"
 
     chunks = []
     current_chunk = header
