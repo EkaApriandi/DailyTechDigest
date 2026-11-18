@@ -1,11 +1,12 @@
 import html
+import time
 from datetime import datetime
 from typing import Dict, List, Any
 import requests
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from database import DigestDatabase
-from summarizer import process_article_summary
+from summarizer import process_article_details
 
 def send_telegram_message(text: str, chat_id: str = TELEGRAM_CHAT_ID, token: str = TELEGRAM_BOT_TOKEN) -> bool:
     """Mengirim satu pesan ke Telegram via HTTP API."""
@@ -32,72 +33,112 @@ def send_telegram_message(text: str, chat_id: str = TELEGRAM_CHAT_ID, token: str
         print(f"[Notifier Error] Gagal mengirim pesan: {e}")
         return False
 
-def build_digest_messages(categorized_articles: Dict[str, List[Dict[str, Any]]], db: DigestDatabase) -> List[str]:
+def format_article_item(art: Dict[str, Any]) -> str:
     """
-    Menyusun kumpulan artikel menjadi pesan berformat HTML elegan,
-    lengkap dengan pemecahan otomatis jika panjang teks melebihi batas Telegram (4096 karakter).
+    Memformat satu artikel menjadi teks HTML Telegram yang rapi, informatif,
+    lengkap tanpa terpotong, dan bertautan ke sumber asli.
     """
-    today_str = datetime.now().strftime("%d %b %Y")
-    header = f"🌅 <b>DAILY WORLD & TECH DIGEST · {today_str}</b>\n<i>Rangkuman peristiwa penting dunia, nasional & teknologi hari ini:</i>\n"
+    title_id = html.escape(art.get("title_id") or art.get("title", ""))
+    source = html.escape(art.get("source", ""))
+    summary_id = html.escape(art.get("summary_id") or art.get("summary_raw", ""))
+    link = art.get("link", "")
 
-    chunks = []
-    current_chunk = header
-    sent_articles = []
+    # Tampilkan judul asli dalam kurung jika judul aslinya bahasa Inggris dan berbeda dari judul terjemahan
+    orig_title = art.get("title", "").strip()
+    sub_title_line = f"<i>Sumber: {source}</i>"
+    if orig_title and orig_title.lower() != title_id.lower() and not art.get("is_indonesian", False):
+        orig_escaped = html.escape(orig_title)
+        sub_title_line = f"<i>Sumber: {source}</i>\n<i>(Judul asli: {orig_escaped})</i>"
+
+    return (
+        f"📌 <b>{title_id}</b>\n"
+        f"{sub_title_line}\n\n"
+        f"{summary_id}\n\n"
+        f"👉 <a href=\"{link}\">Baca Sumber Asli</a>"
+    )
+
+def build_category_messages(categorized_articles: Dict[str, List[Dict[str, Any]]], db: DigestDatabase) -> List[str]:
+    """
+    Menyusun artikel yang sudah diproses dan diterjemahkan menjadi daftar pesan Telegram
+    yang terpisah per kategori dengan pemisah visual yang rapi dan nyaman dibaca.
+    """
+    today_str = datetime.now().strftime("%d %B %Y")
+    
+    messages: List[str] = []
+    sent_articles: List[Dict[str, Any]] = []
+
+    # Pesan pengantar pembuka
+    intro_message = (
+        f"🌅 <b>DAILY WORLD & TECH DIGEST · {today_str}</b>\n"
+        f"<i>Rangkuman lengkap berita dunia, nasional, dan teknologi hari ini. "
+        f"Seluruh berita telah dikurasi, dirincikan lengkap, dan diterjemahkan ke Bahasa Indonesia:</i>"
+    )
+    messages.append(intro_message)
 
     for category, articles in categorized_articles.items():
-        cat_section = f"\n━━━━━━━━━━━━━━━━━━━━\n<b>{category}</b>\n"
-        
-        # Cek apakah header kategori muat di chunk saat ini
-        if len(current_chunk) + len(cat_section) > 3500:
-            chunks.append(current_chunk)
-            current_chunk = cat_section
-        else:
-            current_chunk += cat_section
+        if not articles:
+            continue
+
+        category_header = (
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>{category.upper()}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+
+        current_msg = category_header
+        article_items: List[str] = []
 
         for art in articles:
-            title_escaped = html.escape(art["title"])
-            source_escaped = html.escape(art["source"])
-            link = art["link"]
+            # Proses pengayaan teks dan translasi ke bahasa Indonesia
+            enriched_art = process_article_details(art)
+            sent_articles.append(enriched_art)
+            
+            item_html = format_article_item(enriched_art)
+            article_items.append(item_html)
 
-            # Buat ringkasan padat
-            summary_text = html.escape(process_article_summary(art))
-
-            item_text = (
-                f"\n• <b>{title_escaped}</b> ({source_escaped})\n"
-                f"  {summary_text}\n"
-                f"  👉 <a href=\"{link}\">Baca Sumber Lengkap</a>\n"
-            )
-
-            if len(current_chunk) + len(item_text) > 3800:
-                chunks.append(current_chunk)
-                current_chunk = item_text
+        # Gabungkan artikel-artikel dalam kategori ini
+        separator = "\n\n────────────────────\n\n"
+        for i, item in enumerate(article_items):
+            # Cek panjang jika digabung
+            addition = item if i == 0 else (separator + item)
+            
+            if len(current_msg) + len(addition) > 3800:
+                # Jika pesan melebihi batas Telegram, pecah ke pesan baru
+                messages.append(current_msg.strip())
+                current_msg = f"<b>{category.upper()} (Lanjutan)</b>\n━━━━━━━━━━━━━━━━━━━━\n\n" + item
             else:
-                current_chunk += item_text
+                current_msg += addition
 
-            sent_articles.append(art)
+        if current_msg.strip():
+            messages.append(current_msg.strip())
 
-    if current_chunk.strip():
-        chunks.append(current_chunk)
-
-    # Tandai seluruh artikel yang masuk digest sebagai sudah dibaca
+    # Tandai semua artikel yang terkirim di database agar tidak duplikat di pengiriman berikutnya
     for art in sent_articles:
         db.mark_as_seen(art["link"], art["title"], art["source"])
 
-    return chunks
+    return messages
 
 def dispatch_daily_digest(categorized_articles: Dict[str, List[Dict[str, Any]]], db: DigestDatabase) -> bool:
-    """Mengirim seluruh potongan pesan digest ke Telegram pengguna."""
+    """Mengirim seluruh potongan pesan digest per kategori ke Telegram pengguna."""
     if not categorized_articles:
         print("[Notifier] Tidak ada artikel baru hari ini.")
         return True
 
-    messages = build_digest_messages(categorized_articles, db)
-    all_success = True
+    print("[Notifier] Memproses rincian lengkap artikel & menerjemahkan ke Bahasa Indonesia...")
+    messages = build_category_messages(categorized_articles, db)
+    print(f"[Notifier] Menyiapkan {len(messages)} pesan kategori untuk dikirim ke Telegram...")
 
+    all_success = True
     for i, msg in enumerate(messages, 1):
-        footer = f"\n<i>(Bagian {i}/{len(messages)})</i>" if len(messages) > 1 else ""
-        success = send_telegram_message(msg + footer)
-        if not success:
+        success = send_telegram_message(msg)
+        if success:
+            print(f"[Notifier] Bagian {i}/{len(messages)} berhasil dikirim.")
+        else:
+            print(f"[Notifier] Bagian {i}/{len(messages)} gagal dikirim.")
             all_success = False
+        
+        # Jeda sejenak antar pengiriman agar tertib di Telegram API
+        if i < len(messages):
+            time.sleep(1.0)
 
     return all_success

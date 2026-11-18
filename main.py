@@ -9,6 +9,7 @@ if str(BASE_DIR) not in sys.path:
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DIGEST_TIME
 from database import DigestDatabase
 from fetcher import fetch_all_fresh_articles
+from summarizer import process_article_details
 from notifier import send_telegram_message
 from scheduler import run_digest_cycle, start_scheduler_daemon
 
@@ -24,8 +25,8 @@ def check_credentials() -> bool:
     return True
 
 def run_dry_run() -> None:
-    """Mengambil artikel dan menampilkan di konsol tanpa mengirim ke Telegram."""
-    print("🔍 Menjalankan Dry-Run (Mengambil artikel tanpa mengirim)...")
+    """Mengambil artikel dan menampilkan hasil kurasi, rincian & translasi di konsol tanpa mengirim ke Telegram."""
+    print("🔍 Menjalankan Dry-Run (Kurasi, Rincian & Translasi tanpa mengirim ke Telegram)...")
     db = DigestDatabase()
     articles = fetch_all_fresh_articles(db)
 
@@ -33,10 +34,17 @@ def run_dry_run() -> None:
     print(f"\nTotal artikel baru ditemukan: {total}\n")
 
     for cat, items in articles.items():
-        print(f"\n=== {cat} ({len(items)} artikel) ===")
+        print("=" * 60)
+        print(f"📂 KATEGORI: {cat.upper()} ({len(items)} artikel)")
+        print("=" * 60)
         for art in items:
-            print(f"• [{art['source']}] {art['title']}")
-            print(f"  Link: {art['link']}")
+            processed = process_article_details(art)
+            print(f"\n📌 Judul (ID): {processed['title_id']}")
+            if processed['title_id'] != art['title']:
+                print(f"   (Judul Asli: {art['title']})")
+            print(f"   Sumber   : {processed['source']}")
+            print(f"   Rincian  : {processed['summary_id']}")
+            print(f"   Link     : {processed['link']}")
 
 def test_telegram_connection() -> None:
     """Menguji apakah bot bisa mengirim pesan ke Chat ID pengguna."""
@@ -56,7 +64,7 @@ def print_help() -> None:
     print("  python main.py             -> Jalankan kurasi dan kirim digest sekarang")
     print("  python main.py --now       -> Sama seperti di atas")
     print("  python main.py --daemon    -> Jalankan scheduler harian otomatis (setiap jam " + DIGEST_TIME + ")")
-    print("  python main.py --dry-run   -> Uji pengambilan artikel tanpa mengirim ke Telegram")
+    print("  python main.py --dry-run   -> Uji kurasi, rincian & translasi tanpa mengirim ke Telegram")
     print("  python main.py --test      -> Kirim pesan tes koneksi Telegram")
 
 def main():
